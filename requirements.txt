@@ -10,5 +10,5 @@ django-cors-headers==3.11.0
 redis==3.5.3
 django-redis-cache==3.0.0
 pandas
-gunicorn=20.1.0
+gunicorn
 whitenoise=6.0.0
