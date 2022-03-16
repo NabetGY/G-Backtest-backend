@@ -112,14 +112,18 @@ WSGI_APPLICATION = 'core.wsgi.application'
 
 USER_DB = env('USER_DB')
 PASSWORD_DB = env('PASSWORD_DB')
+DATABASE_HOST = env('DATABASE_HOST')
+DATABASE_NAME = env('DATABASE_NAME')
+
+
 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': 'aws_backtest_db',
+        'NAME': DATABASE_NAME,
         'USER': USER_DB,
         'PASSWORD': PASSWORD_DB,
-        'HOST': 'database-backtest.cxkazfgexbfd.us-east-1.rds.amazonaws.com',
+        'HOST': DATABASE_HOST,
         'PORT': '5432',
     }
 }
