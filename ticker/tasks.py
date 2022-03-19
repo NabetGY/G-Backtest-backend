@@ -1,19 +1,11 @@
+import datetime
+
+import pytz
 import requests
 import csv
 from celery import shared_task
-from django.core.cache import cache
-
-
 
 from ticker.models import Ticker, TimeSeries
-
-@shared_task
-def add(x, y):
-    return x + y
-
-@shared_task
-def hola():
-    print('Hola gente...')
 
 @shared_task
 def get_info_ticker():
@@ -46,62 +38,122 @@ def get_tickers():
 
 
 @shared_task
-def update_time_series():
+def update_time_series( intervalStr ):
 
-    """ dataTicker = cache.get_many( ['tickerNow', 'interval', 'position' ]) """
+    ticker = None
+    url  = ''
+    intervalID = None
+    timeSerieString = ''
+    format = ''
+    
 
-    ticker = Ticker.objects.earliest('last_Refreshed')
+    if intervalStr == '30min':
+        timeSerieString = 'Time Series (30min)'
+        format = '%Y-%m-%d %H:%M:%S'
+        ticker = Ticker.objects.filter(is_active=True).earliest('last_Refreshed_30m')
+        intervalID = TimeSeries.INTERVAL_30
+        print(ticker.symbol, intervalID)
 
-    interval = '30min'
+        try:
+            time_serie = TimeSeries.objects.filter(ticker=ticker, interval=intervalID).latest('time')
+            last_time_serie = time_serie.time.replace(tzinfo=datetime.timezone.utc)
+        except TimeSeries.DoesNotExist:
+            last_time_serie = None
 
+        url = 'https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={}&interval={}&outputsize=full&apikey=ZZEAYA9XZ9SNIFGT'.format(
+        ticker.symbol, intervalStr
+        )
 
-    """ if dataTicker == {}:
-        print('entro al if ...')
-        cache.clear()
-        tickers = list( Ticker.objects.values_list('symbol') )
-        dataTicker['tickerNow'] = tickers[0][0]
-        dataTicker['interval'] = '30min'
-        dataTicker['position'] = 0
-        cache.set( 'tickers', tickers )
-        cache.set( 'tickerNow', tickers[0][0] )
-        cache.set( 'interval', '30min' )
-        cache.set( 'position', 0 ) """
+    elif intervalStr == '60min':
+        timeSerieString = 'Time Series (60min)'
+        format = '%Y-%m-%d %H:%M:%S'
+        ticker = Ticker.objects.filter(is_active=True).earliest('last_Refreshed_60m')
+        intervalID = TimeSeries.INTERVAL_HOUR
+        try:
+            time_serie = TimeSeries.objects.filter(ticker=ticker, interval=intervalID).latest('time')
+            last_time_serie = time_serie.time.replace(tzinfo=datetime.timezone.utc)
 
-        
-    url = 'https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={}&interval={}&outputsize=full&apikey=ZZEAYA9XZ9SNIFGT'.format(
-        ticker.symbol, interval
-    )
+        except TimeSeries.DoesNotExist:
+            last_time_serie = None
+
+        url = 'https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={}&interval={}&outputsize=full&apikey=ZZEAYA9XZ9SNIFGT'.format(
+        ticker.symbol, intervalStr
+        )
+
+    if intervalStr == '1Day':
+        timeSerieString = 'Time Series (Daily)'
+        format = '%Y-%m-%d'
+        ticker = Ticker.objects.filter(is_active=True).earliest('last_Refreshed_1D')
+        intervalID = TimeSeries.INTERVAL_DAY
+        try:
+            time_serie = TimeSeries.objects.filter(ticker=ticker, interval=intervalID).latest('time')
+            last_time_serie = time_serie.time.replace(tzinfo=datetime.timezone.utc)
+        except TimeSeries.DoesNotExist:
+            last_time_serie = None
+
+        url = 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={}&apikey=ZZEAYA9XZ9SNIFGT'.format(
+        ticker.symbol
+        )
 
     print(url)
 
     try:
         r = requests.get(url)
     except requests.ConnectionError as e:
-        print('****************************')
         raise Exception("Failed operation...", e)
 
     if r.status_code in [200, 201]:
-        data = r.json()
-        
-        if data.get('Note') == None:
 
-            """ symbol = data.get("Meta Data").get("2. Symbol" """
-            
-            """ last_refreshed = data.get("Meta Data").get("3. Last Refreshed")[:10] """
-            timeSerieString = "Time Series (30min)"
+        data = r.json()
+
+        if 'Note' in data :
+            """ Alpha Vantage standard API call frequency is 5 calls per minute and 500 calls per day. """
+            print("limite excedido...")
+
+        elif 'Error Message' in data :
+            """ "Invalid API call. """
+            ticker.is_active = False
+            ticker.save()
+
+        elif "Meta Data" in data :
+
             time_serie = data.get( timeSerieString )
 
             for key, value in time_serie.items():
-                timeSerie = TimeSeries( ticker=ticker, interval=1, date=key, open=value['1. open'], high=value['2. high'], low=value['3. low'], close=value['4. close'], volume=value['5. volume'],)
-                timeSerie.save()
 
-            ticker.save()
+                date_time_obj = datetime.datetime.strptime(key, format).replace(tzinfo=datetime.timezone.utc)
+
+                if last_time_serie == None :
+                    timeSerie = TimeSeries( ticker=ticker, interval=intervalID, time=date_time_obj, open=value['1. open'], high=value['2. high'], low=value['3. low'], close=value['4. close'], volume=value['5. volume'],)
+                    timeSerie.save()
+
+
+                elif last_time_serie < date_time_obj:
+
+                    timeSerie = TimeSeries( ticker=ticker, interval=intervalID, time=date_time_obj, open=value['1. open'], high=value['2. high'], low=value['3. low'], close=value['4. close'], volume=value['5. volume'],)
+                    timeSerie.save()
+                    
+                else:
+                    print('mierda hasta aqui llegue!!!...')
+                    return
+                
+            if intervalStr == '30min':
+                ticker.last_Refreshed_30m = datetime.datetime.now()
+                ticker.save()
+
+            elif intervalStr == '60min':
+                ticker.last_Refreshed_60m = datetime.datetime.now()
+                ticker.save()
+
+            elif intervalStr == '1Day':
+                ticker.last_Refreshed_1D = datetime.datetime.now()
+                ticker.save()
+
             print('Se recopilo con exito el ticket =', ticker.symbol)
-
-            """ tickers = cache.get('tickers')
-            cache.set('position', dataTicker.get('position')+1 )
-            cache.set('tickerNow', tickers[ dataTicker.get('position') ][0]  """
-
+        
         else:
-            print("limite excedido, gomenazai...")
+            print("Error: ", data)
+    else:
+        print("Error, code: ", r.status_code)
+
 

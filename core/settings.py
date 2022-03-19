@@ -154,7 +154,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'es-CO'
 
-TIME_ZONE = 'America/Bogota'
+TIME_ZONE = 'UTC'
 
 USE_I18N = True
 
@@ -195,22 +195,36 @@ SIMPLE_JWT = {
 
 
 # Celery Configuration Options
-BROKER_URL = 'redis://127.0.0.1:6379/0'
-CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379'
+REDIS_URL = env('REDIS_URL')
+
+#BROKER_URL = 'redis://127.0.0.1:6379/0'
+#CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379'
 CELERY_ACCEPT_CONTENT = ['application/json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 
-CELERY_TIMEZONE = 'America/Bogota'
+CELERY_TIMEZONE = 'UTC'
+CELERY_ENABLE_UTC = True
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60
-CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_BROKER_URL = REDIS_URL
 
 CELERY_BEAT_SCHEDULE = {
-    "Hola": {
+    "get_info_tickers_30min": {
         "task": "ticker.tasks.update_time_series",
-        "schedule": timedelta(seconds=173)
-    }
+        "schedule": timedelta(seconds=523),
+        "args": ("30min",)
+    },
+    "get_info_tickers_60min": {
+        "task": "ticker.tasks.update_time_series",
+        "schedule": timedelta(seconds=523),
+        "args": ("60min",)
+    },
+    "get_info_tickers_1Day": {
+        "task": "ticker.tasks.update_time_series",
+        "schedule": timedelta(seconds=523),
+        "args": ("1Day",)
+    },
 }
 
 

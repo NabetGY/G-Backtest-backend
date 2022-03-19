@@ -1,3 +1,4 @@
+from datetime import datetime
 from random import choices
 from django.db import models
 
@@ -5,7 +6,11 @@ class Ticker(models.Model):
 
     name = models.CharField( "Nombre", max_length=255)
     symbol = models.CharField( "Simbolo", max_length=20)
-    last_Refreshed = models.DateField(auto_now=True)
+    is_active = models.BooleanField(default = True)
+    last_Refreshed_30m = models.DateField(default=datetime.now)
+    last_Refreshed_60m = models.DateField(default=datetime.now)
+    last_Refreshed_1D = models.DateField(default=datetime.now)
+
 
     def __str__(self):
         return self.name
