@@ -54,7 +54,6 @@ INSTALLED_APPS = [
     'django.contrib.postgres',
     'django_celery_beat',
     'corsheaders',
-    'django_extensions',
     'core',
     'users',
     'ticker',
