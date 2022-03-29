@@ -52,7 +52,6 @@ def update_time_series( intervalStr ):
         format = '%Y-%m-%d %H:%M:%S'
         ticker = Ticker.objects.filter(is_active=True).earliest('last_Refreshed_30m')
         intervalID = TimeSeries.INTERVAL_30
-        print(ticker.symbol, intervalID)
 
         try:
             time_serie = TimeSeries.objects.filter(ticker=ticker, interval=intervalID).latest('time')
@@ -134,7 +133,7 @@ def update_time_series( intervalStr ):
                     timeSerie.save()
                     
                 else:
-                    print('mierda hasta aqui llegue!!!...')
+                    print('No hay mas registros para agregar al actual ticker...')
                     return
                 
             if intervalStr == '30min':

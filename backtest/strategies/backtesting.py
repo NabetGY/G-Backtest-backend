@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from decimal import Decimal
 from backtest.models import Backtest
 from users.models import User
 
@@ -16,29 +17,33 @@ def get_time_series(symbol, start_date, end_date):
 
     ticker = Ticker.objects.filter(symbol=symbol).first()
     dateRange = TimeSeries.objects.filter(ticker=ticker,time__range=(start_date, end_date)).order_by('time')
-    return dateRange, ticker
+    return dateRange
 
 
-def get_resumen( dateframe ):
+def get_resumen( dataframe ):
 
-    print (dateframe[['date_time','price_in', 'price_out', 'positions', 'profit_loss' ]])
+    #print(dataframe["stop"].to_string())
+
 
     resumen = {}
 
-    resumen["operations"] = dateframe["profit_loss"].notna().sum()
+    resumen["operations"] = dataframe["profit_loss"].notna().sum()
 
-    resumen["winrate"] = ( np.sum(dateframe["profit_loss"] > 0 ) / resumen['operations'] ) * 100
+    resumen["winrate"] = ( np.sum(dataframe["profit_loss"] > 0 ) / resumen['operations'] ) * 100
 
-    resumen["Total_P_L"] = dateframe["profit_loss"].sum()
+    resumen["Total_P_L"] = dataframe["profit_loss"].sum()
 
-    resumen["max_profit"] = dateframe["profit_loss"].max()
+    resumen["max_profit"] = dataframe["profit_loss"].max()
     
-    resumen["max_loss"] = dateframe["profit_loss"].min() if dateframe["profit_loss"].min() < 0 else 0
+    resumen["max_loss"] = dataframe["profit_loss"].min() if dataframe["profit_loss"].min() < 0 else 0
 
     return resumen
 
 
-def get_report( dataframe, capital ):
+
+
+def get_report( dataframe, capital, margenStr ):
+
     
     sizePosition = capital*0.1
     lossMax = capital*0.01
@@ -47,7 +52,7 @@ def get_report( dataframe, capital ):
 
     dataframeReport = dataframe.loc[ dataframe['position'] != 0.0, ['position', 'time', 'buy', 'sell']]
 
-    dataframeReport.columns = ["In_Out", "date_time", "price_in",  "price_out"]
+    dataframeReport.columns = ["In_Out", "time", "price_in",  "price_out"]
 
     price_out = pd.to_numeric(dataframeReport["price_out"])
     price_in = pd.to_numeric(dataframeReport["price_in"])
@@ -99,9 +104,95 @@ def get_positions(dataframe):
     return dataframe
 
 
-def backtest(symbol, capital, start_date, end_date, indicatorData, email):
 
-    data, ticker = get_time_series(symbol, start_date, end_date)
+def getMargen(margenStr):
+    
+    if(margenStr=='1:1'):
+        return ( 1, Decimal( 0.01 ) )
+    if(margenStr=='2:1'):
+        return ( 2, Decimal( 0.01 ) )
+    if(margenStr=='3:1'):
+        return ( 3, Decimal( 0.01 ) )
+    if(margenStr=='4:1'):
+        return ( 4, Decimal( 0.01 ) )
+    if(margenStr=='5:1'):
+        return ( 5, Decimal( 0.01 ) )
+
+
+def process_backtest( dataframe, capital2, margenStr ):
+
+    margen = getMargen( margenStr )
+
+    capital = Decimal(capital2)
+    sizePosition = capital*Decimal(0.1)
+    lossMax = capital*margen[1]
+    stopLoss = lossMax/sizePosition
+    target= margen[0]*stopLoss
+
+    dataframe['price_in'] = np.NAN
+    dataframe['price_out'] = np.NAN
+    dataframe['stop'] = np.NAN
+    dataframe['target'] = np.NAN
+    dataframe['positions'] = np.NAN
+    dataframe['profit_loss'] = np.NAN
+    dataframe['in_out'] = 0
+
+    for item in range(0, len(dataframe)):
+        if( item==0 ):
+            dataframe.loc[item, 'price_in'] = dataframe.loc[item, 'buy']
+
+        elif ( (pd.notna(dataframe.loc[item-1, 'price_in']) and (dataframe.loc[item-1, 'in_out']>=0 )) and ((dataframe.loc[item, 'close'] < dataframe.loc[item-1, 'stop']) or ( dataframe.loc[item, 'close'] > dataframe.loc[item-1, 'target'] ))):
+            dataframe.loc[item, 'in_out'] = -1
+            dataframe.loc[item, 'price_in'] = dataframe.loc[item-1, 'price_in']
+            dataframe.loc[item, 'price_out'] = dataframe.loc[item, 'close']
+            dataframe.loc[item, 'stop'] = dataframe.loc[item-1, 'stop']
+            dataframe.loc[item, 'target'] = dataframe.loc[item-1, 'target']
+            dataframe.loc[item, 'positions'] = dataframe.loc[item-1, 'positions']
+            dataframe.loc[item, 'profit_loss'] = (dataframe.loc[item, 'price_out'] - dataframe.loc[item, 'price_in'] ) * dataframe.loc[item, 'positions']
+            capital = capital + (dataframe.loc[item, 'price_out'] * dataframe.loc[item, 'positions'] )
+            print(dataframe.loc[item, :])
+
+
+        elif ( (pd.notna(dataframe.loc[item-1, 'price_in']) and (dataframe.loc[item-1, 'in_out']>=0 ) ) and (dataframe.loc[item, 'close'] > dataframe.loc[item-1, 'stop']) and ( dataframe.loc[item, 'close'] < dataframe.loc[item-1, 'target'] ) ):
+            dataframe.loc[item, 'price_in'] = dataframe.loc[item-1, 'price_in']
+            dataframe.loc[item, 'stop'] = dataframe.loc[item-1, 'stop']
+            dataframe.loc[item, 'target'] = dataframe.loc[item-1, 'target']
+            dataframe.loc[item, 'positions'] = dataframe.loc[item-1, 'positions']
+        
+
+        elif ( pd.notna(dataframe.loc[item, 'buy']) and pd.isna(dataframe.loc[item-1, 'price_in'])):
+            dataframe.loc[item, 'in_out'] = 1
+            dataframe.loc[item, 'price_in'] = dataframe.loc[item, 'buy']
+            sizePosition = capital*Decimal(0.1)
+            lossMax = capital*margen[1]
+            stopLoss = lossMax/sizePosition
+            target= margen[0]*stopLoss
+            dataframe.loc[item, 'stop' ] = dataframe.loc[item, 'price_in'] - (dataframe.loc[item, 'price_in'] * stopLoss)
+            dataframe.loc[item, 'positions' ] =  Decimal(np.floor(sizePosition/dataframe.loc[item, 'price_in']))
+            capital = capital - (dataframe.loc[item, 'positions' ] * dataframe.loc[item, 'price_in' ])
+            dataframe.loc[item, 'target' ] = dataframe.loc[item, 'price_in'] + ( dataframe.loc[item, 'price_in'] * target)
+            print(dataframe.loc[item, :])
+
+    dataframe["stp%"] = margen[1]
+    dataframe["positions%"] = margen[0]
+
+    return dataframe
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+def backtest(symbol, capital, start_date, end_date, indicatorData, margen):
+
+    data = get_time_series(symbol, start_date, end_date)
     
     df =  pd.DataFrame(data.values())
 
@@ -109,18 +200,61 @@ def backtest(symbol, capital, start_date, end_date, indicatorData, email):
 
     df = get_positions( df )
 
-    df2 = get_report( df, capital )
+    df2 = process_backtest( df, capital, margen )
 
     resumen = get_resumen(df2)
 
     df2 = df2.fillna('')
 
-    user = User.objects.filter(email=email).first()
+    return resumen , df2.to_dict('tight')
 
-    print(user, ticker)
 
-    backtest = Backtest(ticker=ticker,capital=capital, date_start =start_date, date_end=end_date, interval='30min',indicators_data=indicatorData ,user= user)
 
-    backtest.save()
 
-    return resumen, df2.to_dict('tight'), data
+""" 
+def process_backtest( dataframe, capital2, margenStr ):
+
+    margen = getMargen( margenStr )
+
+    capital = Decimal(capital2)
+    sizePosition = capital*Decimal(0.1)
+    lossMax = capital*margen[1]
+    stopLoss = lossMax/sizePosition
+    target= margen[0]*stopLoss
+
+    for item in range(0, len(dataframe)):
+        if( item==0 ):
+            dataframe.loc[item, 'price_in'] = dataframe.loc[item, 'buy']
+
+        elif ( pd.notna(dataframe.loc[item-1, 'price_in']) and ((dataframe.loc[item, 'close'] < dataframe.loc[item-1, 'stop']) or ( dataframe.loc[item, 'close'] > dataframe.loc[item-1, 'target'] ))):
+            dataframe.loc[item, 'price_in'] = dataframe.loc[item-1, 'price_in']
+            dataframe.loc[item, 'price_out'] = dataframe.loc[item, 'close']
+            dataframe.loc[item, 'stop'] = dataframe.loc[item-1, 'stop']
+            dataframe.loc[item, 'target'] = dataframe.loc[item-1, 'target']
+            dataframe.loc[item, 'positions'] = dataframe.loc[item-1, 'positions']
+            dataframe.loc[item, 'profit_loss'] = (dataframe.loc[item, 'price_out'] - dataframe.loc[item, 'price_in'] ) * dataframe.loc[item, 'positions']
+            capital = capital + (dataframe.loc[item, 'price_out'] * dataframe.loc[item, 'positions'] )
+
+        elif ( (pd.notna(dataframe.loc[item-1, 'price_in']) and pd.isna(dataframe.loc[item-1, 'profit/loss'])) and (dataframe.loc[item, 'close'] > dataframe.loc[item-1, 'stop']) and ( dataframe.loc[item, 'close'] < dataframe.loc[item-1, 'target'] ) ):
+            dataframe.loc[item, 'price_in'] = dataframe.loc[item-1, 'price_in']
+            dataframe.loc[item, 'stop'] = dataframe.loc[item-1, 'stop']
+            dataframe.loc[item, 'target'] = dataframe.loc[item-1, 'target']
+            dataframe.loc[item, 'positions'] = dataframe.loc[item-1, 'positions']
+        
+
+        elif ( pd.notna(dataframe.loc[item, 'buy']) and pd.isna(dataframe.loc[item-1, 'price_in'])):
+            dataframe.loc[item, 'price_in'] = dataframe.loc[item, 'buy']
+            sizePosition = capital*Decimal(0.1)
+            lossMax = capital*margen[1]
+            stopLoss = lossMax/sizePosition
+            target= margen[0]*stopLoss
+            dataframe.loc[item, 'stop' ] = dataframe.loc[item, 'price_in'] - dataframe.loc[item, 'price_in'] * stopLoss
+            dataframe.loc[item, 'positions' ] =  np.floor(sizePosition/dataframe.loc[item, 'price_in'])
+            capital = capital - (dataframe.loc[item, 'positions' ] * dataframe.loc[item, 'price_in' ])
+            dataframe.loc[item, 'target' ] = dataframe.loc[item, 'price_in'] + dataframe.loc[item, 'price_in'] * target
+
+    dataframe["stp%"] = margen[1]
+    dataframe["positions%"] = margen[0]
+
+    return dataframe
+ """

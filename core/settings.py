@@ -49,11 +49,12 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'rest_framework_simplejwt',
-    'rest_framework_simplejwt.token_blacklist',
+    'rest_framework.authtoken',
+    'drf_yasg',
     'django.contrib.postgres',
     'django_celery_beat',
     'corsheaders',
+    'django_extensions',
     'core',
     'users',
     'ticker',
@@ -64,12 +65,9 @@ INSTALLED_APPS = [
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.TokenAuthentication',
     ],
     'COERCE_DECIMAL_TO_STRING': False,
-    # 'DEFAULT_PERMISSION_CLASSES': (
-    #     'rest_framework.permissions.IsAuthenticated',
-    # )
 }
 
 
@@ -186,14 +184,6 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
-    'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': True
-}
-
-
 # Celery Configuration Options
 REDIS_URL = env('REDIS_URL')
 
@@ -234,4 +224,9 @@ CACHES = {
         'BACKEND': 'redis_cache.RedisCache',
         'LOCATION': 'localhost:6379',
     },
+}
+
+
+SWAGGER_SETTINGS = {
+    'DOC_EXPANSION': 'none',
 }

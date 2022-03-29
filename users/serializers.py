@@ -18,7 +18,7 @@ class CustomUserSerializer( serializers.ModelSerializer ):
 class UserSerializer( serializers.ModelSerializer ):
     class Meta:
         model = User
-        fields = '__all__'
+        fields = [ 'username', 'email', 'password' ]
 
     def create(self, validated_data):
         user = User(**validated_data)
@@ -30,7 +30,8 @@ class UserSerializer( serializers.ModelSerializer ):
 class UpdateUserSerializer( serializers.ModelSerializer ):
     class Meta:
         model = User
-        fields = [ 'username', 'email' ]
+        lookup_field = 'email'
+        fields = [ 'username' ]
 
     def update(self, instance, validated_data):
         update_user = super().update(instance, validated_data)
@@ -41,6 +42,7 @@ class UpdateUserSerializer( serializers.ModelSerializer ):
 class UserListSerializer( serializers.ModelSerializer ):
     class Meta:
         model = User
+        fields = [ 'id', 'username', 'email' ]
 
     def to_representation(self, instance):
         return {

@@ -6,6 +6,9 @@ from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from ticker.models import Ticker
+
 from users.models import User
 from backtest.models import Backtest
 
@@ -18,6 +21,7 @@ from ticker.serializers import TickerSerializer, TimeSeriesSerializer
 class BacktestViewSet( viewsets.GenericViewSet ):
     model = Backtest
     serializer_class = BacktestSerializer
+    permission_classes = [IsAuthenticated]
     
 
     def get_object(self, pk):
@@ -32,20 +36,34 @@ class BacktestViewSet( viewsets.GenericViewSet ):
 
 
     def create(self, request):
-        user_serializer = self.serializer_class( data=request.data )
-        if user_serializer.is_valid():
-            user_serializer.save()
-            return Response(
-                {
-                   'message' : 'Backtest creado correctamente.'
-                }, status=status.HTTP_201_CREATED
-            )
+        print(request.data )
+
+        user = User.objects.filter( email=request.data.get( 'email' ) ).first()
+        ticker = Ticker.objects.filter(symbol=request.data["ticker"]).first()
+        margenData = request.data.get('margen')
+        margen = None
+        for item in Backtest.MARGENS:
+            if item[1] == margenData:
+                margen = item[0]
+        backtest = Backtest(ticker=ticker,capital=request.data["capital"], 
+            date_start =request.data["dateStart"], date_end=request.data["dateEnd"], 
+            interval='30min',indicators_data=request.data["indicatorsData"] ,
+            user= user, margen=margen )
+
+        backtest.save()
+
         return Response(
+            {
+                'message' : 'Backtest guardado exitosamente!....',
+                "data": self.serializer_class(backtest).data
+            }, status=status.HTTP_201_CREATED
+        )
+        """ return Response(
             {
                 'message': 'Hay errores en el registro.',
                 'errores': user_serializer.errors
             }, status=status.HTTP_400_BAD_REQUEST
-        )
+        ) """
 
     def retrieve( self, request, pk=None ):
         user = self.get_object( pk )
@@ -70,7 +88,7 @@ class BacktestViewSet( viewsets.GenericViewSet ):
         )
     
     def destroy( self, request, pk=None ):
-        self.model.object.filter(pk=1).delete()
+        self.model.objects.filter(pk=pk).delete()
         return Response(
                 {
                     'message': 'Backtest eliminado correctamente.'
@@ -80,23 +98,23 @@ class BacktestViewSet( viewsets.GenericViewSet ):
 
 
 class BackTestAPIView( APIView ):
+    permission_classes = [IsAuthenticated]
+
 
     def post( self, request):
         print( request.data )
 
-        resumen, report, timeSerie= backtest( 
+        resumen, report= backtest( 
             request.data["ticker"], 
             request.data["capital"], request.data["dateStart"], 
             request.data["dateEnd"], request.data["indicatorsData"],
-            request.data.get( 'email' )
+            request.data["margen"],
         )
 
         
-        timeSerieSerializer = TimeSeriesSerializer(timeSerie, many=True)
         data = {
             "resumen": resumen,
             "report": report,
-            "data": timeSerieSerializer.data
         }
         
         return Response(
@@ -109,6 +127,8 @@ class BackTestAPIView( APIView ):
 
 
 class ListBackTestAPIView( APIView ):
+    permission_classes = [IsAuthenticated]
+
 
     model = Backtest
     serializer_class = BacktestSerializer
