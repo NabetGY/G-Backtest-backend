@@ -31,6 +31,7 @@ urlpatterns = [
     path('login/', Login.as_view(), name='login'),
     path('logout/', Logout.as_view(), name='logout'),
     path('register/', Register.as_view(), name='register'),
+    path('api/password_reset/', include('django_rest_passwordreset.urls', namespace='password_reset')),
     path('update/', UserUpdateAPIView.as_view(), name='update-user'),
     path('delete/', UserDeleteAPIView.as_view(), name='delete-user'),
     path('usuario/', include('users.routers')),

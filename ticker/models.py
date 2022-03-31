@@ -19,8 +19,8 @@ class Ticker(models.Model):
 
 class TimeSeries(models.Model):
 
-    INTERVAL_30=1
-    INTERVAL_HOUR=2
+    INTERVAL_30=2
+    INTERVAL_HOUR=1
     INTERVAL_DAY=3
 
     INTERVALS = [

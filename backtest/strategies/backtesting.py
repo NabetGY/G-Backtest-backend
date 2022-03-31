@@ -13,25 +13,38 @@ from backtest.strategies.ichimokuClouds import get_IchimokuClouds
 
 from ticker.models import Ticker, TimeSeries
 
-def get_time_series(symbol, start_date, end_date):
-
+def get_time_series(symbol, intervalData, start_date, end_date):
+    interval=None
+    for item in TimeSeries.INTERVALS:
+            if item[1] == intervalData:
+                interval = item[0]
     ticker = Ticker.objects.filter(symbol=symbol).first()
-    dateRange = TimeSeries.objects.filter(ticker=ticker,time__range=(start_date, end_date)).order_by('time')
+    dateRange = TimeSeries.objects.filter(ticker=ticker,interval=interval ,time__range=(start_date, end_date)).order_by('time')
     return dateRange
 
 
-def get_resumen( dataframe ):
+def get_resumen( dataframe, capital, finalCapital):
 
     #print(dataframe["stop"].to_string())
 
 
     resumen = {}
 
+    resumen["capital"] = capital
+
+    resumen["capitalFinal"] = finalCapital
+
     resumen["operations"] = dataframe["profit_loss"].notna().sum()
+
+    if (resumen["operations"]==0 ):
+        return resumen
 
     resumen["winrate"] = ( np.sum(dataframe["profit_loss"] > 0 ) / resumen['operations'] ) * 100
 
     resumen["Total_P_L"] = dataframe["profit_loss"].sum()
+
+    resumen["P_L_porcent"] = (resumen["Total_P_L"]/capital) * 100
+
 
     resumen["max_profit"] = dataframe["profit_loss"].max()
     
@@ -150,7 +163,6 @@ def process_backtest( dataframe, capital2, margenStr ):
             dataframe.loc[item, 'positions'] = dataframe.loc[item-1, 'positions']
             dataframe.loc[item, 'profit_loss'] = (dataframe.loc[item, 'price_out'] - dataframe.loc[item, 'price_in'] ) * dataframe.loc[item, 'positions']
             capital = capital + (dataframe.loc[item, 'price_out'] * dataframe.loc[item, 'positions'] )
-            print(dataframe.loc[item, :])
 
 
         elif ( (pd.notna(dataframe.loc[item-1, 'price_in']) and (dataframe.loc[item-1, 'in_out']>=0 ) ) and (dataframe.loc[item, 'close'] > dataframe.loc[item-1, 'stop']) and ( dataframe.loc[item, 'close'] < dataframe.loc[item-1, 'target'] ) ):
@@ -171,12 +183,11 @@ def process_backtest( dataframe, capital2, margenStr ):
             dataframe.loc[item, 'positions' ] =  Decimal(np.floor(sizePosition/dataframe.loc[item, 'price_in']))
             capital = capital - (dataframe.loc[item, 'positions' ] * dataframe.loc[item, 'price_in' ])
             dataframe.loc[item, 'target' ] = dataframe.loc[item, 'price_in'] + ( dataframe.loc[item, 'price_in'] * target)
-            print(dataframe.loc[item, :])
 
-    dataframe["stp%"] = margen[1]
+    dataframe["stp%"] = margen[1]*100
     dataframe["positions%"] = margen[0]
 
-    return dataframe
+    return dataframe, capital
  
 
 
@@ -190,9 +201,12 @@ def process_backtest( dataframe, capital2, margenStr ):
 
 
 
-def backtest(symbol, capital, start_date, end_date, indicatorData, margen):
+def backtest(symbol, interval, capital, start_date, end_date, indicatorData, margen):
 
-    data = get_time_series(symbol, start_date, end_date)
+    data = get_time_series(symbol, interval, start_date, end_date)
+
+    if len(data) == 0:
+        return 2, None, None
     
     df =  pd.DataFrame(data.values())
 
@@ -200,13 +214,15 @@ def backtest(symbol, capital, start_date, end_date, indicatorData, margen):
 
     df = get_positions( df )
 
-    df2 = process_backtest( df, capital, margen )
+    df2, finalCapital = process_backtest( df, capital, margen )
 
-    resumen = get_resumen(df2)
+    resumen = get_resumen( df2, capital, finalCapital)
 
+    if(resumen.get("operations")==0):
+        return 3, None, None
     df2 = df2.fillna('')
 
-    return resumen , df2.to_dict('tight')
+    return 1, resumen , df2.to_dict('tight')
 
 
 

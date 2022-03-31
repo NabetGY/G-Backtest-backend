@@ -47,7 +47,7 @@ class BacktestViewSet( viewsets.GenericViewSet ):
                 margen = item[0]
         backtest = Backtest(ticker=ticker,capital=request.data["capital"], 
             date_start =request.data["dateStart"], date_end=request.data["dateEnd"], 
-            interval='30min',indicators_data=request.data["indicatorsData"] ,
+            interval=request.data["interval"], indicators_data=request.data["indicatorsData"] ,
             user= user, margen=margen )
 
         backtest.save()
@@ -104,24 +104,33 @@ class BackTestAPIView( APIView ):
     def post( self, request):
         print( request.data )
 
-        resumen, report= backtest( 
-            request.data["ticker"], 
+        code, resumen, report= backtest( 
+            request.data["ticker"], request.data["interval"],
             request.data["capital"], request.data["dateStart"], 
             request.data["dateEnd"], request.data["indicatorsData"],
             request.data["margen"],
         )
 
-        
-        data = {
-            "resumen": resumen,
-            "report": report,
-        }
-        
-        return Response(
-                { 
-                    'message': 'llegaron los datos',
+        if(code==1):
+
+            data = { "resumen": resumen, "report": report }
+            
+            return Response(
+                {
+                    "code": code,
+                    'message': 'Backtest Exitoso',
                     "data": data
                 },
+                status = status.HTTP_200_OK
+            )
+        if(code==2):
+            return Response(
+                { "code": code, 'message': 'El ticker seleccionado no posee datos historicos.' },
+                status = status.HTTP_200_OK
+            )
+        if(code==3):
+            return Response(
+                { "code": code, 'message': 'La configuracion actual no consiguio ningun resultado.' },
                 status = status.HTTP_200_OK
             )
 

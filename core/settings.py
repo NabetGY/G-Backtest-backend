@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework.authtoken',
+    'django_rest_passwordreset',
     'drf_yasg',
     'django.contrib.postgres',
     'django_celery_beat',
@@ -201,17 +202,17 @@ CELERY_BROKER_URL = REDIS_URL
 CELERY_BEAT_SCHEDULE = {
     "get_info_tickers_30min": {
         "task": "ticker.tasks.update_time_series",
-        "schedule": timedelta(seconds=523),
+        "schedule": timedelta(minutes=206),
         "args": ("30min",)
     },
     "get_info_tickers_60min": {
         "task": "ticker.tasks.update_time_series",
-        "schedule": timedelta(seconds=523),
+        "schedule": timedelta(minutes=206),
         "args": ("60min",)
     },
     "get_info_tickers_1Day": {
         "task": "ticker.tasks.update_time_series",
-        "schedule": timedelta(seconds=523),
+        "schedule": timedelta(seconds=527),
         "args": ("1Day",)
     },
 }
@@ -229,3 +230,12 @@ CACHES = {
 SWAGGER_SETTINGS = {
     'DOC_EXPANSION': 'none',
 }
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+DEFAULT_FROM_EMAIL='gbacktest@gmail.com'
+SERVER_EMAIL='gbacktest@gmail.com'
+EMAIL_HOST = 'smtp.googlemail.com'
+EMAIL_PORT = 587
+EMAIL_HOST_USER='gbacktest@gmail.com'
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD')
+EMAIL_USE_TLS = True
